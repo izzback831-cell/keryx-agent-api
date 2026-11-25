@@ -1,23 +1,24 @@
 # Keryx Agent API 0.3
 
-API publique et serveur MCP pour les demandes d’inférence Keryx. Les utilisateurs de Claude Code, Codex, VS Code/Copilot, Cursor, Cline et Gemini CLI se connectent par URL HTTPS et clé API. Le mode hébergé prépare les transactions et gère un portefeuille dédié par compte sur le serveur. Consulte [MCP.md](MCP.md) pour ce fonctionnement et les configurations prêtes à adapter.
+Keryx Agent API provides a public HTTP API and an MCP server for Keryx inference requests. Claude Code, Codex, VS Code with Copilot, Cursor, Cline, and Gemini CLI can connect over HTTPS with an API key. In hosted mode, the service prepares transactions and manages a dedicated wallet for each account. For connection instructions and client configuration examples, see [MCP.md](MCP.md).
 
-Les routes natives `/v1/requests` continuent de recevoir des transactions déjà signées. La suite de ce guide décrit le relais natif, qui garde le portefeuille sur la machine de l’agent. La configuration du domaine et du nœud côté hébergement est commune aux deux accès.
+The native `/v1/requests` endpoints accept transactions signed by the caller. In native mode, the agent keeps the wallet on its own machine. The hosting domain and Keryx node configuration apply to both modes.
 
-| Fichier | Usage |
+| Path | Purpose |
 | --- | --- |
-| `bin/windows-amd64/keryx-agent-api.exe` | Serveur API Windows 64 bits |
-| `bin/linux-amd64/keryx-agent-api` | Serveur API Linux x86-64 |
-| `bin/windows-amd64/keryx-agent.exe` | Client de préparation, soumission et lecture sous Windows |
-| `agent/` | Sources du client pour Windows et Linux |
-| `relay/` | Sources du serveur et contrat OpenAPI |
-| `Caddyfile` | Publication HTTPS derrière Caddy |
+| `bin/windows-amd64/keryx-agent-api.exe` | Windows x64 API server |
+| `bin/linux-amd64/keryx-agent-api` | Linux x86-64 API server |
+| `bin/windows-amd64/keryx-agent.exe` | Windows wallet component and native command-line client |
+| `agent/` | Wallet component and native client source for Windows and Linux |
+| `relay/` | Server source and OpenAPI specification |
+| `Caddyfile` | HTTPS reverse proxy configuration |
 
-## Compiler depuis un clone Git
+## Build from source
 
-Installe Go 1.26+, Rust 1.96+ et un compilateur C. Sous Windows x86-64, utilise les outils C++ de Visual Studio pour le linker MSVC. Depuis la racine du dépôt, lance PowerShell.
+Install Go 1.26 or later, Rust 1.96 or later, and a C compiler. On Windows x64, install the Visual Studio C++ Build Tools for the MSVC linker. Run these commands in PowerShell from the repository root.
 
 ```powershell
+New-Item -ItemType Directory -Force -Path bin/windows-amd64 | Out-Null
 Push-Location relay
 go build -mod=readonly -trimpath -o ../bin/windows-amd64/keryx-agent-api.exe .
 Pop-Location
@@ -25,13 +26,13 @@ cargo build --locked --release --manifest-path agent/Cargo.toml
 Copy-Item agent/target/release/keryx-agent.exe bin/windows-amd64/
 ```
 
-Sous Linux x86-64, lance `sh ./build-linux.sh` depuis la racine du dépôt. Le relais et le composant portefeuille se retrouvent dans `bin/linux-amd64/`.
+On Linux x86-64, run `sh ./build-linux.sh` from the repository root. The relay and the wallet component are built into `bin/linux-amd64/`.
 
-## Démarrer le serveur
+## Start the API server
 
-Le réseau principal est sélectionné par défaut. Utilise un nœud Keryx synchronisé qui écoute en wRPC JSON sur `127.0.0.1:24110`. Ajoute `--rpclisten-json=127.0.0.1:24110` à la commande de démarrage du nœud si ce port reste à activer. Le serveur API reçoit ses requêtes HTTP sur `127.0.0.1:8787`.
+The server defaults to mainnet. Use a synced Keryx node that listens for JSON wRPC on `127.0.0.1:24110`. Add `--rpclisten-json=127.0.0.1:24110` to the node's startup command if you need to enable that listener. The API server listens for HTTP on `127.0.0.1:8787`. When using the supplied Caddy proxy, set `KERYX_TRUST_CADDY=1`.
 
-**Windows**
+**Windows PowerShell**
 
 ```powershell
 $env:KERYX_TRUST_CADDY = '1'
@@ -45,47 +46,49 @@ chmod +x bin/linux-amd64/keryx-agent-api
 KERYX_TRUST_CADDY=1 ./bin/linux-amd64/keryx-agent-api
 ```
 
-Teste le catalogue avec `curl.exe http://127.0.0.1:8787/v1/models` sous Windows ou `curl http://127.0.0.1:8787/v1/models` sous Linux.
+Check the model catalog with `curl.exe http://127.0.0.1:8787/v1/models` on Windows or `curl http://127.0.0.1:8787/v1/models` on Linux.
 
-| Variable serveur | Valeur par défaut |
+| Server variable | Default and usage |
 | --- | --- |
-| `KERYX_NETWORK` | `mainnet`. Pour le test, choisir `testnet-10`. |
-| `KERYX_RPC_URL` | `ws://127.0.0.1:24110` sur mainnet et `ws://127.0.0.1:24210` sur testnet. Utiliser le port wRPC JSON. |
-| `KERYX_API_PORT` | `8787`. Répercuter tout changement dans le Caddyfile. |
-| `KERYX_API_DATA_DIR` | `keryx-relay-mainnet` ou `keryx-relay-testnet-10`. La base conserve le suivi après redémarrage. |
-| `KERYX_TRUST_CADDY` | `0`. Mettre `1` avec le Caddyfile fourni pour limiter les appels selon l’adresse du client vue par Caddy. |
+| `KERYX_NETWORK` | `mainnet`. Set it to `testnet-10` for testnet. |
+| `KERYX_RPC_URL` | `ws://127.0.0.1:24110` on mainnet and `ws://127.0.0.1:24210` on testnet-10. Use the JSON wRPC port. |
+| `KERYX_API_PORT` | `8787`. Update the Caddyfile if you change this port. |
+| `KERYX_API_DATA_DIR` | `keryx-relay-mainnet` or `keryx-relay-testnet-10`. The database persists request tracking across restarts. |
+| `KERYX_TRUST_CADDY` | `0`. Set it to `1` with the supplied Caddyfile so the relay rate-limits by the client IP reported by Caddy. |
 
-## Ouvrir l’accès public en HTTPS
+## Publish the service over HTTPS
 
-Fais pointer ton domaine ou sous-domaine vers l’hôte du relais. Installe Caddy sur cet hôte, rends les ports TCP 80 et 443 accessibles et garde le wRPC du nœud sur l’interface locale. Le Caddyfile transmet l’adresse du client et laisse Caddy gérer le certificat HTTPS. [Documentation Caddy](https://caddyserver.com/docs/automatic-https)
+Point your domain or subdomain to the relay host. Install Caddy on that host, allow inbound TCP traffic on ports 80 and 443, and keep the node's wRPC listeners on the local interface. The Caddyfile forwards the client IP, and Caddy manages the HTTPS certificate. [Caddy automatic HTTPS documentation](https://caddyserver.com/docs/automatic-https)
 
-**Windows, dans un deuxième PowerShell**
+**Windows, in a second PowerShell window**
 
 ```powershell
 $env:KERYX_DOMAIN = 'api.example.org'
 caddy.exe run --config .\Caddyfile --adapter caddyfile
 ```
 
-**Linux, dans un deuxième terminal**
+**Linux, in a second terminal**
 
 ```bash
 KERYX_DOMAIN=api.example.org caddy run --config ./Caddyfile --adapter caddyfile
 ```
 
-Remplace `api.example.org` par ton domaine. Depuis une autre connexion Internet, vérifie `https://api.example.org/healthz`, puis `https://api.example.org/v1/models`. Pour une exploitation continue, lance le relais et Caddy comme services de l’hôte.
+Replace `api.example.org` with your domain. From another internet connection, check `https://api.example.org/healthz` and `https://api.example.org/v1/models`. For continuous operation, run the relay and Caddy as host services.
 
-## Appeler l’API depuis un agent
+For hosted accounts and the `/mcp` endpoint, follow [MCP.md](MCP.md#set-up-the-hosted-service).
 
-| Route publique | Fonction |
+## Call the native API from an agent
+
+| Public route | Purpose |
 | --- | --- |
-| `GET /v1/models` | Modèles, mineurs éligibles et coût minimal en sompi |
-| `POST /v1/requests` | Dépôt d’une transaction Keryx `AiRequest` chiffrée et signée |
-| `GET /v1/requests/{transaction_id}` | État et réponses Keryx chiffrées |
-| `GET /openapi.json` | Contrat à importer dans le client |
+| `GET /v1/models` | List models, eligible miners, and the minimum cost in sompi |
+| `POST /v1/requests` | Submit an encrypted, signed Keryx `AiRequest` transaction |
+| `GET /v1/requests/{transaction_id}` | Get request status and encrypted Keryx responses |
+| `GET /openapi.json` | Get the OpenAPI specification for client integration |
 
-Toute intégration qui sait produire le JSON natif d’une `AiRequest` signée peut utiliser le relais. Le client livré s’appuie sur un nœud Keryx de confiance pour lire les UTXO du portefeuille et les clés des mineurs. Ce nœud doit avoir `--utxoindex` et peut être situé ailleurs que le relais. Le choix du RPC de confiance appartient à l’agent.
+Any integration that can produce the native JSON for a signed `AiRequest` can use the relay. The supplied client uses a trusted Keryx node to read the wallet's unspent transaction outputs (UTXOs) and miners' keys. That node needs `--utxoindex` and can run on a different host from the relay. The agent operator chooses the trusted RPC endpoint.
 
-`keryx-agent init` donne l’adresse publique du portefeuille local. Alimente cette adresse sur le réseau choisi. Le montant disponible doit couvrir le coût et une sortie de monnaie d’au moins 1 KRX. La monnaie retourne au portefeuille. Conserve le dossier `keryx-wallet-<réseau>` sur la machine de l’agent. Il contient la clé du portefeuille et les secrets nécessaires à la lecture des réponses.
+Run `keryx-agent init` to get the local wallet's public address and fund it on the selected network. Spendable funds must cover the request cost and a change output of at least 1 KRX. The change returns to the wallet. Keep `keryx-wallet-<network>` on the agent machine. It holds the wallet key and the secrets needed to decrypt responses.
 
 **Windows PowerShell**
 
@@ -95,46 +98,46 @@ $agent = '.\bin\windows-amd64\keryx-agent.exe'
 & $agent init
 
 $promptFile = Join-Path $PWD 'prompt.txt'
-[IO.File]::WriteAllText($promptFile, 'Explique le rôle du Proof-of-Model en deux phrases.', [Text.UTF8Encoding]::new($false))
+[IO.File]::WriteAllText($promptFile, 'Explain the role of Proof-of-Model in two sentences.', [Text.UTF8Encoding]::new($false))
 $job = & $agent prepare 0 prompt.txt 80000000 128 | ConvertFrom-Json
 & $agent submit $job.transaction_id
 & $agent result $job.transaction_id
 ```
 
-**Linux, après compilation du client**
+**Linux, after building the client**
 
 ```bash
 export KERYX_API_URL=https://api.example.org
 agent=./agent/target/release/keryx-agent
 "$agent" init
 
-printf '%s\n' 'Explique le rôle du Proof-of-Model en deux phrases.' > prompt.txt
+printf '%s\n' 'Explain the role of Proof-of-Model in two sentences.' > prompt.txt
 "$agent" prepare 0 prompt.txt 80000000 128
 "$agent" submit TRANSACTION_ID
 "$agent" result TRANSACTION_ID
 ```
 
-Dans les commandes Linux, remplace `TRANSACTION_ID` par l’identifiant renvoyé par `prepare`. Le coût maximal de l’exemple est de 80 000 000 sompi, soit 0,8 KRX. `prepare` chiffre, signe et enregistre la transaction localement. `submit` diffuse cette transaction. `result` affiche la réponse déchiffrée dès qu’elle est disponible. Réessaie `submit` avec le **même identifiant** si l’envoi est incertain. Cette opération réutilise la transaction signée.
+In the Linux commands, replace `TRANSACTION_ID` with the ID returned by `prepare`. The example sets a maximum cost of 80,000,000 sompi, or 0.8 KRX. The `prepare` command encrypts, signs, and saves the transaction locally. The `submit` command broadcasts it. The `result` command displays the decrypted response once available. If the submission outcome is uncertain, retry `submit` with the **same transaction ID** to reuse the signed transaction.
 
-Les intégrations HTTP peuvent lancer `keryx-agent export TRANSACTION_ID` et poster le JSON généré sur `/v1/requests`. L’export contient le réseau et la transaction. Il peut être diffusé tel quel, et le déchiffrement reste associé à la demande locale.
+HTTP integrations can run `keryx-agent export TRANSACTION_ID` and POST the resulting JSON to `/v1/requests`. The export contains the network and the transaction. It can be broadcast as-is, and the local request state provides the keys needed for decryption.
 
-| Variable client | Valeur par défaut |
+| Client variable | Default and usage |
 | --- | --- |
-| `KERYX_NETWORK` | `mainnet`. Utiliser le même réseau que le relais. |
-| `KERYX_API_URL` | `http://127.0.0.1:8787`. Pour une API distante, configurer son URL HTTPS. |
-| `KERYX_AGENT_RPC_URL` | `ws://127.0.0.1:23110` sur mainnet et `ws://127.0.0.1:23210` sur testnet en Borsh. |
-| `KERYX_AGENT_RPC_ENCODING` | `borsh`. Choisir `json` en accord avec le port du RPC de confiance. |
-| `KERYX_AGENT_DATA_DIR` | `keryx-wallet-<réseau>` |
+| `KERYX_NETWORK` | `mainnet`. Use the same network as the relay. |
+| `KERYX_API_URL` | `http://127.0.0.1:8787`. Use the public HTTPS URL for a remote API. |
+| `KERYX_AGENT_RPC_URL` | `ws://127.0.0.1:23110` on mainnet and `ws://127.0.0.1:23210` on testnet-10 when using Borsh. |
+| `KERYX_AGENT_RPC_ENCODING` | `borsh`. Set it to `json` when connecting to a JSON wRPC listener. |
+| `KERYX_AGENT_DATA_DIR` | `keryx-wallet-<network>`. |
 
-## Suivi et limites du relais
+## Request tracking and limits
 
-Le code HTTP `202` indique que le relais a traité la soumission. L’état `broadcast_unconfirmed` indique que la réception par le nœud reste incertaine. `submitted` indique que le nœud a vu la transaction. `confirmed` et `answered` reposent sur la chaîne virtuelle avec un seuil de dix confirmations. Les audits Keryx suivent leur propre cycle.
+HTTP `202` means the relay processed the submission. The `broadcast_unconfirmed` status means the node may have received the transaction. The `submitted` status means the node saw it. The relay uses the virtual chain and a ten-confirmation threshold for `confirmed` and `answered`. Keryx audits follow their own cycle.
 
-Le relais conserve jusqu’à 4 096 demandes. Il suit une demande acceptée pendant 48 heures et un envoi sans confirmation pendant une heure. Le nœud doit conserver les blocs nécessaires au suivi. Espace les appels de résultat d’au moins trois secondes. Le relais limite les appels par adresse et renvoie `429` ou `503` en cas de saturation.
+The relay tracks up to 4,096 requests. It tracks an accepted request for 48 hours and an unconfirmed submission for one hour. The node must retain the blocks needed for tracking. Wait at least three seconds between result checks. The relay rate-limits requests by IP address and returns `429` or `503` when limits are reached or capacity is exhausted.
 
-## Compiler et vérifier
+## Run local tests and builds
 
-Relais avec Go 1.26 ou ultérieur. Les tests incluent un échange HTTP simulé utilisant une transaction signée par les bibliothèques Keryx et une réponse chiffrée issue de ces mêmes bibliothèques.
+Run each command block from the repository root. The relay requires Go 1.26 or later. The tests include a simulated HTTP exchange with a transaction signed by the Keryx libraries and a response encrypted by the same libraries.
 
 ```text
 cd relay
@@ -142,7 +145,7 @@ go test -mod=readonly ./...
 go build -mod=readonly -trimpath .
 ```
 
-Client sous Windows ou Linux avec Rust 1.96 ou ultérieur. Le client emploie les bibliothèques Keryx `v1.6.7-PoM`. Les dépendances sont récupérées auprès de GitHub et de crates.io.
+The wallet component builds on Windows and Linux with Rust 1.96 or later. It uses the Keryx `v1.6.7-PoM` libraries and downloads dependencies from GitHub and crates.io.
 
 ```text
 cd agent
@@ -150,7 +153,7 @@ cargo build --locked --release
 cargo test --locked
 ```
 
-Le relais Windows a été lancé et le relais Linux a été compilé pour x86-64. Le test de soumission et de récupération utilise des données d’inférence simulées. La validation sur un nœud synchronisé avec des mineurs actifs reste à faire.
+The relay and wallet component passed their builds and tests on Windows and Ubuntu. The inference submission and result tests use simulated data. A live request with a funded account and an active miner still needs to be validated. [Windows and Ubuntu test results](https://github.com/izzback831-cell/keryx-agent-api/actions/runs/45592585847)
 
-- [Protocole d’inférence et chiffrement Keryx](https://keryx-labs.com/whitepaper)
-- [Version de keryxd utilisée comme référence réseau](https://github.com/Keryx-Labs/keryx-node/releases/tag/v1.6.8-PoM)
+- [Keryx inference protocol and encryption](https://keryx-labs.com/whitepaper)
+- [Keryx node version used as the protocol reference](https://github.com/Keryx-Labs/keryx-node/releases/tag/v1.6.8-PoM)
