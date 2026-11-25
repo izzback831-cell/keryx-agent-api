@@ -1,0 +1,456 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Keryx Agent API",
+    "version": "0.3.0",
+    "description": "Keryx native transaction relay, hosted inference REST API and remote MCP endpoint."
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/v1/models": {
+      "get": {
+        "operationId": "listModels",
+        "summary": "List model fees and eligible miners",
+        "responses": {
+          "200": {
+            "description": "Catalog and node synchronization state",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/requests": {
+      "post": {
+        "operationId": "submitInference",
+        "summary": "Relay a signed encrypted AiRequest transaction",
+        "description": "Resend the same signed transaction to retry. The transaction hash is the stable request ID.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The relay has recorded the request and attempted broadcast. Check state for acknowledgment.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/requests/{id}": {
+      "get": {
+        "operationId": "getInference",
+        "summary": "Retrieve the state and encrypted answers of a relayed request",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Hash"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Observed state. Use the local request secret to decrypt responses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/account": {
+      "get": {
+        "summary": "Read dedicated account funding and spending limits",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hosted account request state or result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/v1/agent/requests": {
+      "post": {
+        "summary": "Submit an inference request using the hosted account wallet",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Hosted account request state or result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HostedAsk"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/agent/requests/{request_id}": {
+      "get": {
+        "summary": "Read this account request and decrypted answer",
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hosted account request state or result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Hash"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "Error": {
+        "description": "Invalid input, unknown request, rate limit or relay/node unavailable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "required": [
+                    "code",
+                    "message"
+                  ],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Hash": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "Network": {
+        "type": "string",
+        "enum": [
+          "mainnet",
+          "testnet-10"
+        ]
+      },
+      "Catalog": {
+        "type": "object",
+        "required": [
+          "network",
+          "synced",
+          "inference_active",
+          "virtual_daa_score",
+          "models"
+        ],
+        "properties": {
+          "network": {
+            "$ref": "#/components/schemas/Network"
+          },
+          "synced": {
+            "type": "boolean"
+          },
+          "inference_active": {
+            "type": "boolean"
+          },
+          "virtual_daa_score": {
+            "type": "integer"
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "tier": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "model_id": {
+                  "$ref": "#/components/schemas/Hash"
+                },
+                "eligible_miners": {
+                  "type": "integer"
+                },
+                "cost_sompi": {
+                  "type": "integer"
+                },
+                "reward_sompi": {
+                  "type": "integer"
+                },
+                "fee_sompi": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "SignedRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "network",
+          "transaction"
+        ],
+        "properties": {
+          "network": {
+            "$ref": "#/components/schemas/Network"
+          },
+          "transaction": {
+            "type": "object",
+            "description": "Keryx RpcTransaction in native camelCase JSON. The AiRequest payload is hex and the subnetwork is 03.",
+            "required": [
+              "version",
+              "inputs",
+              "outputs",
+              "lockTime",
+              "subnetworkId",
+              "gas",
+              "payload",
+              "mass"
+            ],
+            "properties": {
+              "version": {
+                "type": "integer"
+              },
+              "inputs": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "outputs": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "lockTime": {
+                "type": "integer"
+              },
+              "subnetworkId": {
+                "const": "0300000000000000000000000000000000000000"
+              },
+              "gas": {
+                "type": "integer"
+              },
+              "payload": {
+                "type": "string"
+              },
+              "mass": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Status": {
+        "type": "object",
+        "required": [
+          "network",
+          "transaction_id",
+          "state",
+          "confirmed_in",
+          "answers"
+        ],
+        "properties": {
+          "network": {
+            "$ref": "#/components/schemas/Network"
+          },
+          "transaction_id": {
+            "$ref": "#/components/schemas/Hash"
+          },
+          "state": {
+            "enum": [
+              "broadcast_unconfirmed",
+              "submitted",
+              "confirmed",
+              "answered"
+            ]
+          },
+          "confirmed_in": {
+            "type": "string"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "transaction_id",
+                "accepting_block",
+                "escrow_key",
+                "encrypted_body",
+                "reported_tokens"
+              ],
+              "properties": {
+                "transaction_id": {
+                  "$ref": "#/components/schemas/Hash"
+                },
+                "accepting_block": {
+                  "$ref": "#/components/schemas/Hash"
+                },
+                "escrow_key": {
+                  "$ref": "#/components/schemas/Hash"
+                },
+                "encrypted_body": {
+                  "type": "string",
+                  "description": "Hex-encoded encrypted response envelope."
+                },
+                "reported_tokens": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "HostedAsk": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_key",
+          "tier",
+          "prompt",
+          "max_cost_sompi"
+        ],
+        "properties": {
+          "request_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "tier": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "max_tokens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4096,
+            "default": 256
+          },
+          "max_cost_sompi": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "Bearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

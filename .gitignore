@@ -1,0 +1,15 @@
+/bin/
+/dist/
+/agent/target/
+/relay/keryx-agent-api
+/relay/keryx-agent-api.exe
+/keryx-relay-*/
+/keryx-wallet-*/
+/keryx-service-*/
+**/wallet-key.txt
+**/accounts/*.json
+**/signed-requests/*.json
+**/requests.db
+.env
+.env.*
+*.exe

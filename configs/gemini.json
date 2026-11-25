@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "keryx": {
+      "httpUrl": "https://api.example.org/mcp",
+      "headers": { "Authorization": "Bearer ${KERYX_API_KEY}" },
+      "timeout": 90000
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "keryx": {
+      "type": "http",
+      "url": "https://api.example.org/mcp",
+      "headers": { "Authorization": "Bearer ${env:KERYX_API_KEY}" }
+    }
+  }
+}

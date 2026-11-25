@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "keryx": {
+      "type": "streamableHttp",
+      "url": "https://api.example.org/mcp",
+      "headers": { "Authorization": "Bearer REPLACE_WITH_YOUR_KERYX_API_KEY" },
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}

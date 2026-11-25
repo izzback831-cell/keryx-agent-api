@@ -1,0 +1,26 @@
+[package]
+name = "keryx-agent"
+version = "0.3.0"
+edition = "2024"
+rust-version = "1.89"
+
+[dependencies]
+anyhow = "1"
+hex = "0.4"
+keryx-addresses = { git = "https://github.com/Keryx-Labs/keryx-node.git", tag = "v1.6.7-PoM" }
+keryx-consensus-core = { git = "https://github.com/Keryx-Labs/keryx-node.git", tag = "v1.6.7-PoM" }
+keryx-inference = { git = "https://github.com/Keryx-Labs/keryx-node.git", tag = "v1.6.7-PoM" }
+keryx-rpc-core = { git = "https://github.com/Keryx-Labs/keryx-node.git", tag = "v1.6.7-PoM" }
+keryx-txscript = { git = "https://github.com/Keryx-Labs/keryx-node.git", tag = "v1.6.7-PoM" }
+keryx-wrpc-client = { git = "https://github.com/Keryx-Labs/keryx-node.git", tag = "v1.6.7-PoM" }
+rand = "0.8"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-webpki-roots"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+zeroize = { version = "1", features = ["serde"] }
+
+[profile.dev]
+debug = 0

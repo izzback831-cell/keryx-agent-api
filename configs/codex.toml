@@ -1,0 +1,4 @@
+[mcp_servers.keryx]
+url = "https://api.example.org/mcp"
+bearer_token_env_var = "KERYX_API_KEY"
+tool_timeout_sec = 90
